@@ -1,14 +1,14 @@
 """
 navigator.py — Enhanced LAD-RAG Navigator
 Retrieves relevant SEC filing pages and synthesizes analyst-grade answers
-via Claude API with financial-focused prompting.
+via Groq API (free tier) with financial-focused prompting.
 """
 
 import json
 import os
 import re
 from sentence_transformers import SentenceTransformer, util
-import anthropic
+from groq import Groq
 
 
 # ------------------------------------------------
@@ -232,27 +232,30 @@ DO NOT fabricate numbers. If a number is not in the provided context, say "Not d
 
 
 # ------------------------------------------------
-# LLM ANSWER SYNTHESIS — via Claude API
+# LLM ANSWER SYNTHESIS — via Groq API (free tier)
+# Model: llama-3.3-70b-versatile — best free model for financial reasoning
 # ------------------------------------------------
 
 def synthesize_answer(query: str, context: str) -> str:
 
-    client = anthropic.Anthropic()   # reads ANTHROPIC_API_KEY from env
+    client = Groq()   # reads GROQ_API_KEY from env
 
     user_message = (
         f"ANALYST QUERY: {query}\n\n"
         f"FILING CONTEXT (extracted pages):\n\n"
-        f"{context[:12000]}"          # stay within context window
+        f"{context[:6000]}"   # Groq free tier: stay within token limits
     )
 
-    response = client.messages.create(
-        model="claude-opus-4-5",
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
         max_tokens=1200,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user",   "content": user_message},
+        ],
     )
 
-    return response.content[0].text
+    return response.choices[0].message.content
 
 
 # ------------------------------------------------
@@ -321,7 +324,5 @@ if __name__ == "__main__":
 
         try:
             answer_query(query)
-        except anthropic.APIError as e:
-            print(f"\nAPI error: {e}")
         except Exception as e:
             print(f"\nError: {e}")
